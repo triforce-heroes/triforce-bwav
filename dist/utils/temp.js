@@ -1,0 +1,1 @@
+import{tmpdir as r}from"node:os";export function createTemporaryFile(o="wav"){return`${r()}/${Math.random().toString(16).slice(2)}.${o}`}

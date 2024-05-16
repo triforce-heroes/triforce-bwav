@@ -1,0 +1,1 @@
+import{readFileSync as t}from"node:fs";import{root as e}from"./path.js";export function hash(t,e){let n=0n;for(let o=0;o<t.length;o++)n=n*e+BigInt(t.codePointAt(o));return Number(n&BigInt(4294967295))}export const wavesHashes=new Map(Object.entries(JSON.parse(t(e("fixtures/bwav-hashes.json"),"utf8"))));

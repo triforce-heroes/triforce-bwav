@@ -1,0 +1,1 @@
+import{spawnSync as o}from"node:child_process";import{basename as t,dirname as r}from"node:path";import{root as e}from"../utils/path.js";let m=e("tools/byml-converter.exe");export function BYMLConvert(e){return o(m,["to-byml",e]),`${r(e)}/${t(e,".yaml")}.byml`}

@@ -1,0 +1,1 @@
+export class Unsigned{constructor(e){this.value=e}}export const UnsignedTag={tag:"!u",resolve:e=>new Unsigned(Number.parseInt(e,16)),stringify:e=>String(`0x${e.value.value.toString(16).toUpperCase()}`)};

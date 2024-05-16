@@ -1,0 +1,1 @@
+import{spawnSync as o}from"node:child_process";import{rmSync as t}from"node:fs";import{root as r}from"../utils/path.js";import{copyModifiedTime as e}from"../utils/time.js";import{soxConvert as m}from"./Sox.js";let i=r("tools/brstm-converter.exe");export function BRSTMConvert(r,s,p){let f=m(r,p);o(i,[f,"-o",s]),e(s,r),t(f)}

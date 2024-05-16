@@ -1,0 +1,1 @@
+import{normalize as o}from"node:path";export function root(r){return o(`${import.meta.dirname}/../../${r}`)}
