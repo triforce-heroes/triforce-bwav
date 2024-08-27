@@ -1,4 +1,3 @@
-/// <reference types="node" resolution-mode="require"/>
 import { Scalar, YAMLMap, YAMLSeq } from "yaml";
 export declare const resources: import("yaml").Document.Parsed<import("yaml").Alias.Parsed, true> | import("yaml").Document.Parsed<Scalar.Parsed, true> | import("yaml").Document.Parsed<YAMLMap.Parsed<import("yaml").ParsedNode, import("yaml").ParsedNode | null>, true> | import("yaml").Document.Parsed<YAMLSeq.Parsed<import("yaml").ParsedNode>, true>;
 export declare const resourcesHashes: {

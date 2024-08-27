@@ -47,8 +47,10 @@ export async function ConvertCommand(options: ConvertCommandOptions) {
   process.stdout.write("Searching by WAV files...\n");
 
   const files = globSync("**/*.wav", {
+    ignore: ["node_modules"],
     cwd: process.cwd(),
     posix: true,
+    absolute: true,
   });
 
   if (files.length === 0) {
@@ -66,25 +68,51 @@ export async function ConvertCommand(options: ConvertCommandOptions) {
   archive.pipe(archiveOutput);
 
   for (const file of files) {
-    const fileBasename = basename(file, ".wav");
-    const fileBasenameBWAV = `${dirname(file)}/${fileBasename}.c.bwav`;
+    let fileHashes: string[] = [];
+    const fileBasename = `/${basename(file, ".wav")}`;
+    const fileBasenameFull = `/${basename(dirname(file.slice(4)))}${fileBasename}`;
 
-    if (!wavesHashes.has(fileBasename)) {
-      process.stdout.write(`- ${file}... INVALID\n`);
+    for (const wavHash of wavesHashes.keys()) {
+      if (wavHash.endsWith(fileBasenameFull)) {
+        fileHashes = [wavHash];
+
+        break;
+      }
+
+      if (wavHash.endsWith(fileBasename)) {
+        fileHashes.push(wavHash);
+      }
+    }
+
+    if (fileHashes.length > 1) {
+      process.stdout.write(`\n- ${fileBasenameFull}... CONFLICTS\n`);
+
+      for (const wavHash of fileHashes) {
+        process.stdout.write(`  -> ${wavHash}.bwav\n`);
+      }
+
       continue;
     }
 
-    const wavHash = wavesHashes.get(fileBasename)!;
-    const wavResource = resourcesHashes[wavHash]!;
+    const fileHash = fileHashes[0]!;
 
-    const wavPathPrefix = fileBasename.split("_Text_")[0]!;
-    const wavPathDirectory = `romfs/Voice/Resource/USen/EventFlowMsg/${wavPathPrefix}_Stream`;
+    if (!wavesHashes.has(fileHash)) {
+      process.stdout.write(`\n- ${fileBasenameFull}... INVALID\n`);
+
+      continue;
+    }
+
+    const wavHash = wavesHashes.get(fileHash)!;
+    const wavResource = resourcesHashes[wavHash]!;
 
     const resourceChannels = wavResource.items[0]!.value as YAMLSeq;
     const resourceChannelsCount = resourceChannels.items.length;
 
     const resourceChannel = resourceChannels.items[0]! as YAMLMap;
     const resourceChannelDSP = resourceChannel.items.length === 4;
+
+    const fileBasenameBase = dirname(dirname(file.slice(4)));
+    const fileBasenameBWAV = `${fileBasenameBase}${fileBasenameFull}.c.bwav`;
 
     const fileIsModified =
       options.force === true ||
@@ -93,7 +121,7 @@ export async function ConvertCommand(options: ConvertCommandOptions) {
 
     if (fileIsModified) {
       process.stdout.write(
-        `- [${resourceChannelDSP ? `D` : `L`}${String(resourceChannelsCount)}] ${file}... `,
+        `\n- [${resourceChannelDSP ? `D` : `L`}${String(resourceChannelsCount)}] ${fileBasenameFull}... `,
       );
     }
 
@@ -119,7 +147,7 @@ export async function ConvertCommand(options: ConvertCommandOptions) {
     }
 
     archive.file(fileBasenameBWAV, {
-      name: `${wavPathDirectory}/${fileBasename}.bwav`,
+      name: `romfs/Voice/Resource/USen/${fileHash}.bwav`,
     });
 
     if (fileIsModified) {
