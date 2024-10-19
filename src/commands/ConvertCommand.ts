@@ -31,6 +31,7 @@ import {
 interface ConvertCommandOptions {
   force?: boolean;
   keepTemps?: boolean;
+  debug?: boolean;
   copy?: string;
 }
 
@@ -119,7 +120,7 @@ export async function ConvertCommand(options: ConvertCommandOptions) {
       !existsSync(fileBasenameBWAV) ||
       isModified(file, fileBasenameBWAV);
 
-    if (fileIsModified) {
+    if (fileIsModified || options.debug) {
       process.stdout.write(
         `\n- [${resourceChannelDSP ? `D` : `L`}${String(resourceChannelsCount)}] ${fileBasenameFull}... `,
       );
@@ -150,7 +151,7 @@ export async function ConvertCommand(options: ConvertCommandOptions) {
       name: `romfs/Voice/Resource/USen/${fileHash}.bwav`,
     });
 
-    if (fileIsModified) {
+    if (fileIsModified || options.debug) {
       process.stdout.write("OK\n");
     }
   }

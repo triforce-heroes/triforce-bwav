@@ -10,6 +10,7 @@ program
   .description("Converts .wav files to respective .bwav and patches .byml.")
   .option("-f, --force", "Overwrite existing files.", false)
   .option("-t, --keep-temps", "Keep temporary files.", false)
+  .option("-d, --debug", "Enable debug mode.", false)
   .option("--copy <path>", "Copies the file to the specified path.")
   .action(ConvertCommand);
 
