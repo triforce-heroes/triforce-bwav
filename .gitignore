@@ -1,2 +1,4 @@
-**/*.wav
-**/*.bwav
+/*.wav
+/*.bwav
+/*.bars
+/*.zs

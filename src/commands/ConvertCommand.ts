@@ -6,8 +6,10 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
 import { basename, dirname } from "node:path";
+import { crc32 } from "node:zlib";
 
 import { fatal } from "@triforce-heroes/triforce-core/Console";
 import archiver from "archiver";
@@ -18,7 +20,7 @@ import { YAMLMap, YAMLSeq } from "yaml";
 import { BRSTMConvert } from "../tools/BRSTM.js";
 import { BYMLConvert } from "../tools/BYML.js";
 import { VGAConvert } from "../tools/VGA.js";
-import { ZSTDCompress } from "../tools/ZSTD.js";
+import { ZSTDCompress, ZSTDDecompress } from "../tools/ZSTD.js";
 import { wavesHashes } from "../utils/hash.js";
 import { isModified } from "../utils/time.js";
 import {
@@ -68,6 +70,8 @@ export async function ConvertCommand(options: ConvertCommandOptions) {
 
   archive.pipe(archiveOutput);
 
+  const barsMap = new Map<string, Buffer>();
+
   for (const file of files) {
     let fileHashes: string[] = [];
     const fileBasename = `/${basename(file, ".wav")}`;
@@ -96,6 +100,92 @@ export async function ConvertCommand(options: ConvertCommandOptions) {
     }
 
     const fileHash = fileHashes[0]!;
+
+    if (fileBasename.startsWith("/NV_USen_Custom_")) {
+      const barsPath = fileBasename.slice(1);
+      const barsCompressedPath = barsPath.replace(/_[a-z0-9]+$/i, ".bars.zs");
+
+      if (!existsSync(barsCompressedPath)) {
+        process.stdout.write(
+          `\n- ${fileBasenameFull}... INVALID, BARS NOT FOUND\n`,
+        );
+
+        continue;
+      }
+
+      const barsDecompressedPath = ZSTDDecompress(barsCompressedPath);
+
+      if (!barsMap.has(barsDecompressedPath)) {
+        barsMap.set(barsDecompressedPath, readFileSync(barsDecompressedPath));
+      }
+
+      const barsData = barsMap.get(barsDecompressedPath)!;
+      const barsPathHash = crc32(barsPath);
+      const barsEntriesCount = barsData.readUint32LE(0x0c);
+
+      let barsEntryIndex: number | undefined;
+
+      for (let i = 0; i < barsEntriesCount; i++) {
+        const barsEntryHash = barsData.readUInt32LE(0x10 + i * 0x04);
+
+        if (barsEntryHash === barsPathHash) {
+          barsEntryIndex = i;
+
+          break;
+        }
+      }
+
+      if (barsEntryIndex === undefined) {
+        process.stdout.write(
+          `\n- ${fileBasenameFull}... INVALID, BARS HASH NOT FOUND\n`,
+        );
+
+        continue;
+      }
+
+      const barsBwavOffset = barsData.readUInt32LE(
+        0x10 + barsEntriesCount * 0x04 + barsEntryIndex * 0x08 + 0x04,
+      );
+
+      const barsBwavChannels = barsData.readUInt16LE(barsBwavOffset + 0x0e);
+      const barsBwavCompiled = `${barsPath}.c.bwav`;
+
+      const barsFileIsModified =
+        options.force === true ||
+        !existsSync(barsBwavCompiled) ||
+        isModified(file, barsBwavCompiled);
+
+      if (barsFileIsModified || options.debug) {
+        process.stdout.write(
+          `\n- [L${String(barsBwavChannels)}] ${fileBasenameFull}... `,
+        );
+      }
+
+      BRSTMConvert(file, barsBwavCompiled, barsBwavChannels);
+
+      const barsBwavHeaderLength = 64 + 64 * barsBwavChannels;
+      const barsBwavCompiledData = readFileSync(barsBwavCompiled).subarray(
+        0,
+        barsBwavHeaderLength,
+      );
+
+      barsBwavCompiledData.copy(
+        barsData,
+        barsBwavOffset,
+        0,
+        barsBwavHeaderLength,
+      );
+
+      archive.file(barsBwavCompiled, {
+        name: `romfs/Sound/Resource/Stream/${barsPath}.bwav`,
+      });
+
+      if (barsFileIsModified || options.debug) {
+        process.stdout.write("OK\n");
+      }
+
+      continue;
+    }
 
     if (!wavesHashes.has(fileHash)) {
       process.stdout.write(`\n- ${fileBasenameFull}... INVALID\n`);
@@ -157,6 +247,25 @@ export async function ConvertCommand(options: ConvertCommandOptions) {
   }
 
   process.stdout.write(`\n`);
+
+  if (barsMap.size > 0) {
+    process.stdout.write(`Generating BARS... `);
+
+    for (const [barsPath, barsData] of barsMap) {
+      const barsCompiledPath = `${barsPath.slice(0, -5)}.c.bars`;
+
+      writeFileSync(barsCompiledPath, barsData);
+
+      const barsCompressedPath = ZSTDCompress(barsCompiledPath, "bars.zs");
+
+      archive.file(barsCompressedPath, {
+        name: `romfs/Sound/Resource/${basename(barsPath)}.zs`,
+      });
+    }
+
+    process.stdout.write(`OK\n`);
+  }
+
   process.stdout.write(`Patching YAML... `);
 
   const resourcesPath = resourcesWrite();
