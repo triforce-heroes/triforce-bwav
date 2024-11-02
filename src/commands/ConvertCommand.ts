@@ -52,7 +52,6 @@ export async function ConvertCommand(options: ConvertCommandOptions) {
   const files = globSync("**/*.wav", {
     ignore: ["node_modules"],
     cwd: process.cwd(),
-    posix: true,
     absolute: true,
   });
 
@@ -72,10 +71,12 @@ export async function ConvertCommand(options: ConvertCommandOptions) {
 
   const barsMap = new Map<string, Buffer>();
 
+  let compileByml = false;
+
   for (const file of files) {
     let fileHashes: string[] = [];
     const fileBasename = `/${basename(file, ".wav")}`;
-    const fileBasenameFull = `/${basename(dirname(file.slice(4)))}${fileBasename}`;
+    const fileBasenameFull = `/${basename(dirname(file))}${fileBasename}`;
 
     for (const wavHash of wavesHashes.keys()) {
       if (wavHash.endsWith(fileBasenameFull)) {
@@ -102,8 +103,8 @@ export async function ConvertCommand(options: ConvertCommandOptions) {
     const fileHash = fileHashes[0]!;
 
     if (fileBasename.startsWith("/NV_USen_Custom_")) {
-      const barsPath = fileBasename.slice(1);
-      const barsCompressedPath = barsPath.replace(/_[a-z0-9]+$/i, ".bars.zs");
+      const barsEntryName = basename(file, ".wav");
+      const barsCompressedPath = `${dirname(file)}/${barsEntryName.replace(/_[a-z0-9]+$/i, ".bars.zs")}`;
 
       if (!existsSync(barsCompressedPath)) {
         process.stdout.write(
@@ -120,7 +121,7 @@ export async function ConvertCommand(options: ConvertCommandOptions) {
       }
 
       const barsData = barsMap.get(barsDecompressedPath)!;
-      const barsPathHash = crc32(barsPath);
+      const barsPathHash = crc32(barsEntryName);
       const barsEntriesCount = barsData.readUint32LE(0x0c);
 
       let barsEntryIndex: number | undefined;
@@ -148,7 +149,7 @@ export async function ConvertCommand(options: ConvertCommandOptions) {
       );
 
       const barsBwavChannels = barsData.readUInt16LE(barsBwavOffset + 0x0e);
-      const barsBwavCompiled = `${barsPath}.c.bwav`;
+      const barsBwavCompiled = `${dirname(file)}/${barsEntryName}.c.bwav`;
 
       const barsFileIsModified =
         options.force === true ||
@@ -157,7 +158,7 @@ export async function ConvertCommand(options: ConvertCommandOptions) {
 
       if (barsFileIsModified || options.debug) {
         process.stdout.write(
-          `\n- [L${String(barsBwavChannels)}] ${fileBasenameFull}... `,
+          `\n- [D${String(barsBwavChannels)}] ${fileBasenameFull}... `,
         );
       }
 
@@ -177,7 +178,7 @@ export async function ConvertCommand(options: ConvertCommandOptions) {
       );
 
       archive.file(barsBwavCompiled, {
-        name: `romfs/Sound/Resource/Stream/${barsPath}.bwav`,
+        name: `romfs/Sound/Resource/Stream/${barsEntryName}.bwav`,
       });
 
       if (barsFileIsModified || options.debug) {
@@ -202,13 +203,15 @@ export async function ConvertCommand(options: ConvertCommandOptions) {
     const resourceChannel = resourceChannels.items[0]! as YAMLMap;
     const resourceChannelDSP = resourceChannel.items.length === 4;
 
-    const fileBasenameBase = dirname(dirname(file.slice(4)));
+    const fileBasenameBase = dirname(dirname(file));
     const fileBasenameBWAV = `${fileBasenameBase}${fileBasenameFull}.c.bwav`;
 
     const fileIsModified =
       options.force === true ||
       !existsSync(fileBasenameBWAV) ||
       isModified(file, fileBasenameBWAV);
+
+    compileByml = true;
 
     if (fileIsModified || options.debug) {
       process.stdout.write(
@@ -266,31 +269,39 @@ export async function ConvertCommand(options: ConvertCommandOptions) {
     process.stdout.write(`OK\n`);
   }
 
-  process.stdout.write(`Patching YAML... `);
+  let zstdPath: string | undefined;
 
-  const resourcesPath = resourcesWrite();
-  const bymlPath = BYMLConvert(resourcesPath);
-  const zstdPath = ZSTDCompress(bymlPath);
+  if (compileByml) {
+    process.stdout.write(`Patching YAML... `);
 
-  archive.file(zstdPath, {
-    name: `romfs/Voice/BwavInfo/USen.byml.zs`,
-  });
+    const resourcesPath = resourcesWrite();
+    const bymlPath = BYMLConvert(resourcesPath);
 
-  if (options.keepTemps === true) {
-    cpSync(resourcesPath, `USen.yaml`, { force: true });
+    zstdPath = ZSTDCompress(bymlPath);
+
+    archive.file(zstdPath, {
+      name: `romfs/Voice/BwavInfo/USen.byml.zs`,
+    });
+
+    if (options.keepTemps === true) {
+      cpSync(resourcesPath, `USen.yaml`, { force: true });
+    }
+
+    rmSync(resourcesPath);
+    rmSync(bymlPath);
+
+    process.stdout.write(`OK\n`);
   }
 
-  rmSync(resourcesPath);
-  rmSync(bymlPath);
-
-  process.stdout.write(`OK\n`);
   process.stdout.write(`Compressing... `);
 
   await archive.finalize();
 
-  rmSync(zstdPath);
-
   process.stdout.write(`OK\n`);
+
+  if (zstdPath !== undefined) {
+    rmSync(zstdPath);
+  }
 
   if (options.copy !== undefined) {
     process.stdout.write(`Copying... `);

@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { basename, dirname } from "node:path";
 
 import { root } from "../utils/path.js";
 import { createTemporaryFile } from "../utils/temp.js";
@@ -16,7 +17,7 @@ export function ZSTDCompress(path: string, suffix = "byml.zs") {
 }
 
 export function ZSTDDecompress(path: string) {
-  const pathOutput = path.slice(0, -3);
+  const pathOutput = `${dirname(path)}/${basename(path, ".zs")}`;
 
   if (!existsSync(pathOutput)) {
     spawnSync(zstd, [
